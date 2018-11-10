@@ -21,6 +21,7 @@ class Gyroscope {
   float pid_i_mem_roll, pid_roll_setpoint, gyro_roll_input, pid_output_roll, pid_last_roll_d_error;
   float pid_i_mem_pitch, pid_pitch_setpoint, gyro_pitch_input, pid_output_pitch, pid_last_pitch_d_error;
   float pid_i_mem_yaw, pid_yaw_setpoint, gyro_yaw_input, pid_output_yaw, pid_last_yaw_d_error;
+  float roll_level_adjust, pitch_level_adjust;
 
   // Variables for Gyro readings
   int gyro_address;
@@ -48,12 +49,12 @@ public:
   * provide incorrect values for Angular Movement.
   */
   void read_angular_movement();
-  void calculate_esc_adjustments();
+  void calculate_adjustments();
 
   float get_pitch_angle();
   float get_roll_angle();
   float get_yaw_angle();
-  float get_pitch_esc_adjustment();
-  float get_roll_esc_adjustment();
-  float get_yaw_esc_adjustment();  
+  float get_pitch_adjustment();
+  float get_roll_adjustment();
+  float get_yaw_adjustment();  
 };

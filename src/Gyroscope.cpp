@@ -22,6 +22,44 @@ void Gyroscope::calibrate() {
   gyro_z_cal /= 2000;                                                  //Divide the gyro_z_cal variable by 2000 to get the avarage offset
 }
 
+void Gyroscope::calculate_adjustments() {
+  //Roll calculations
+  pid_error_temp = gyro_roll_input - pid_roll_setpoint;
+  pid_i_mem_roll += pid_i_gain_roll * pid_error_temp;
+  if(pid_i_mem_roll > pid_max_roll)pid_i_mem_roll = pid_max_roll;
+  else if(pid_i_mem_roll < pid_max_roll * -1)pid_i_mem_roll = pid_max_roll * -1;
+
+  pid_output_roll = pid_p_gain_roll * pid_error_temp + pid_i_mem_roll + pid_d_gain_roll * (pid_error_temp - pid_last_roll_d_error);
+  if(pid_output_roll > pid_max_roll)pid_output_roll = pid_max_roll;
+  else if(pid_output_roll < pid_max_roll * -1)pid_output_roll = pid_max_roll * -1;
+
+  pid_last_roll_d_error = pid_error_temp;
+
+  //Pitch calculations
+  pid_error_temp = gyro_pitch_input - pid_pitch_setpoint;
+  pid_i_mem_pitch += pid_i_gain_pitch * pid_error_temp;
+  if(pid_i_mem_pitch > pid_max_pitch)pid_i_mem_pitch = pid_max_pitch;
+  else if(pid_i_mem_pitch < pid_max_pitch * -1)pid_i_mem_pitch = pid_max_pitch * -1;
+
+  pid_output_pitch = pid_p_gain_pitch * pid_error_temp + pid_i_mem_pitch + pid_d_gain_pitch * (pid_error_temp - pid_last_pitch_d_error);
+  if(pid_output_pitch > pid_max_pitch)pid_output_pitch = pid_max_pitch;
+  else if(pid_output_pitch < pid_max_pitch * -1)pid_output_pitch = pid_max_pitch * -1;
+
+  pid_last_pitch_d_error = pid_error_temp;
+
+  //Yaw calculations
+  pid_error_temp = gyro_yaw_input - pid_yaw_setpoint;
+  pid_i_mem_yaw += pid_i_gain_yaw * pid_error_temp;
+  if(pid_i_mem_yaw > pid_max_yaw)pid_i_mem_yaw = pid_max_yaw;
+  else if(pid_i_mem_yaw < pid_max_yaw * -1)pid_i_mem_yaw = pid_max_yaw * -1;
+
+  pid_output_yaw = pid_p_gain_yaw * pid_error_temp + pid_i_mem_yaw + pid_d_gain_yaw * (pid_error_temp - pid_last_yaw_d_error);
+  if(pid_output_yaw > pid_max_yaw)pid_output_yaw = pid_max_yaw;
+  else if(pid_output_yaw < pid_max_yaw * -1)pid_output_yaw = pid_max_yaw * -1;
+
+  pid_last_yaw_d_error = pid_error_temp;
+}
+
 void Gyroscope::read_angular_movement(){
 
   read_mpu_6050_data();                                                //Read the raw acc and gyro data from the MPU-6050
@@ -30,6 +68,10 @@ void Gyroscope::read_angular_movement(){
   gyro_y -= gyro_y_cal;                                                //Subtract the offset calibration value from the raw gyro_y value
   gyro_z -= gyro_z_cal;                                                //Subtract the offset calibration value from the raw gyro_z value
   
+  gyro_roll_input = (gyro_roll_input * 0.7) + ((gyro_x / 65.5) * 0.3);   //Gyro pid input is deg/sec.
+  gyro_pitch_input = (gyro_pitch_input * 0.7) + ((gyro_y / 65.5) * 0.3);//Gyro pid input is deg/sec.
+  gyro_yaw_input = (gyro_yaw_input * 0.7) + ((gyro_z / 65.5) * 0.3);      //Gyro pid input is deg/sec.
+
   //Gyro angle calculations
   //0.0000611 = 1 / (250Hz / 65.5)
   angle_pitch += gyro_x * 0.0000611;                                   //Calculate the traveled pitch angle and add this to the angle_pitch variable
@@ -43,9 +85,15 @@ void Gyroscope::read_angular_movement(){
   //Accelerometer angle calculations
   acc_total_vector = sqrt((acc_x*acc_x)+(acc_y*acc_y)+(acc_z*acc_z));  //Calculate the total accelerometer vector
   //57.296 = 1 / (3.142 / 180) The Arduino asin function is in radians
-  angle_pitch_acc = asin((float)acc_y/acc_total_vector)* 57.296;       //Calculate the pitch angle
-  angle_roll_acc = asin((float)acc_x/acc_total_vector)* -57.296;       //Calculate the roll angle
-  angle_yaw_acc = asin((float)acc_z/acc_total_vector)* -57.296;
+  if(abs(acc_y) < acc_total_vector) {
+    angle_pitch_acc = asin((float)acc_y/acc_total_vector)* 57.296;       //Calculate the pitch angle
+  }
+  if(abs(acc_x) < acc_total_vector) {
+    angle_roll_acc = asin((float)acc_x/acc_total_vector)* -57.296;       //Calculate the roll angle
+  }
+  if(abs(acc_z) < acc_total_vector) {
+    angle_yaw_acc = asin((float)acc_z/acc_total_vector)* -57.296;
+  }
   
   //Place the MPU-6050 spirit level and note the values in the following two lines for calibration
   angle_pitch_acc -= 0.0;                                              //Accelerometer calibration value for pitch
@@ -64,6 +112,9 @@ void Gyroscope::read_angular_movement(){
     set_gyro_angles = true;                                            //Set the IMU started flag
   }
   
+  pitch_level_adjust = angle_pitch * 15;                                    //Calculate the pitch angle correction
+  roll_level_adjust = angle_roll * 15;                                      //Calculate the roll angle correction
+
   //To dampen the pitch and roll angles a complementary filter is used
   angle_pitch_output = angle_pitch_output * 0.9 + angle_pitch * 0.1;   //Take 90% of the output pitch value and add 10% of the raw pitch value
   angle_roll_output = angle_roll_output * 0.9 + angle_roll * 0.1;      //Take 90% of the output roll value and add 10% of the raw roll value
@@ -80,6 +131,17 @@ float Gyroscope::get_yaw_angle() {
   return angle_yaw_output;
 }
 
+float Gyroscope::get_pitch_adjustment() {
+  return pid_output_pitch;
+}
+
+float Gyroscope::get_roll_adjustment() {
+  return pid_output_yaw;
+}
+
+float Gyroscope::get_yaw_adjustment() {
+  return pid_output_yaw;
+}
 
 void Gyroscope::read_mpu_6050_data(){                                             //Subroutine for reading the raw gyro and accelerometer data
   Wire.beginTransmission(gyro_address);                                        //Start communicating with the MPU-6050
